@@ -25,7 +25,7 @@ Here's a list of the AWS services that have been leveraged for this solution:
 
 ---
 
-### Solution installation
+## Solution installation
 
 These are the steps to launch the infrastructure:
 
@@ -41,7 +41,7 @@ These are the steps to launch the infrastructure:
 
 ---
 
-### Known limitations
+## Known limitations
 
 - DocumentDB does not provide public endpoints so it can only be connected to from inside the same VPC. It is also only compatible with MongoDB up to version 3.6.
 
@@ -49,7 +49,7 @@ These are the steps to launch the infrastructure:
 
 ---
 
-### Resource deletion
+## Resource deletion
 
 These are the steps to delete the infrastructure:
 
@@ -61,7 +61,7 @@ These are the steps to delete the infrastructure:
 
 ---
 
-### Requirements 
+## Requirements 
 
 1. _Automate the creation of the infrastructure and the setup of the application._
 
@@ -89,7 +89,7 @@ These are the steps to delete the infrastructure:
 
 ---
 
-### Potential improvements
+## Potential improvements
 
 - To improve overall security, deploy resources inside private subnets rather than public ones, especially when using physical EC2 instances and databases over serverless services. Bastion hosts in public subnets can be used to allow ingress SSH access to the instances in private subnets, as well as NAT Gateways for egress if needed. 
 
