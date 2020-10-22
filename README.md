@@ -39,13 +39,22 @@ These are the steps to launch the infrastructure:
 5. Open the link found under the Outputs tabs of the infrastructure stack to reach the endpoint of the running application. 
 
 
+### Known limitations
+
+- DocumentDB does not provide public endpoints so it can only be connected to from inside the same VPC. It is also only compatible with MongoDB up to version 3.6.
+
+- The solution uses more than one CloudFormation stack. When deleting them, it must be done in a specific order and some of the resources must be manually emptied (the S3 bucket and the ECR repository, as mentioned in the next section), otherwise the stack deletion will fail. 
+
+
 ### Resource deletion
 
-1. Delete the last stack that was automatically deployed by the pipeline first, the one related to the infrastructure;
+These are the steps to delete the infrastructure:
 
-2. In the first pipeline stack, under the Resources stack, open the S3 bucket and the ECR repository and empty them. If they are not empty, the stack deletion will fail;
+1. Delete the last stack that was automatically deployed by the pipeline, the one related to the infrastructure containing the VPC, the Fargate cluster, the DocumentDB database, etc.;
 
-3. Delete the pipeline stack. 
+2. In the first pipeline stack, under the _Resources_ tab, open the S3 bucket and the ECR repository and empty them. If they are not empty, the stack deletion will fail;
+
+3. Once the infrastructure stack is deleted successfully, proceed to delete the pipeline stack.
 
 
 ### Requirements 
@@ -79,10 +88,10 @@ These are the steps to launch the infrastructure:
 
 - To improve overall security, deploy resources inside private subnets rather than public ones, especially when using physical EC2 instances and databases over serverless services. Bastion hosts in public subnets can be used to allow ingress SSH access to the instances in private subnets, as well as NAT Gateways for egress if needed. 
 
-- The _AwsvpcConfiguration_ parameter for Fargate is set to use _AssignPublicIp: ENABLED_. It can be changed to DISABLED if private subnets that have access to a NAT gateway are used in the VPC.       
+- The _AwsvpcConfiguration_ parameter for Fargate is set to use _AssignPublicIp: ENABLED_. It can be changed to DISABLED if private subnets that have access to a NAT gateway are used in the VPC.
 
-- The _rds-combined-ca-bundle.pem_ certificate file provided by AWS and necessary to connect to the DocumentDB cluster is included inside the application code. 
+- The _rds-combined-ca-bundle.pem_ certificate file provided by AWS and necessary to connect to the DocumentDB cluster is included inside the application code. As it is publicly available on S3, it could be downloaded programmativally when needed. 
 
-- GitHub is leveraged for this solution but CodeCommit could replace it for a more integrated service. 
+- GitHub is leveraged for this solution but CodeCommit could replace it for a more integrated service with Amazon Web Services and CodePipeline in particular. 
 
 - A different Infrastructure as code (IaC) tool such as Terraform or AWS CDK can be used to deploy the solution. CloudFormation is the native IaC service on AWS and it's very powerful, but it also has several flaws when compared to other services. 
