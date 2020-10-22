@@ -2,7 +2,6 @@
 
 _An attempt at solving the Phoenix Application kata with the public cloud._
 
----
 
 This repository contains the code of the Phoenix Application and the CloudFormation templates required to deploy it on Amazon Web Services. The deployment is managed by two AWS CloudFormation templates, one to create a CI/CD pipeline and another one to create the relevant resources for a high-available infrastructure. 
 
