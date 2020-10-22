@@ -1,7 +1,8 @@
 # Phoenix Application problem
 
+_An attempt at solving the Phoenix Application kata with the public cloud._
 
-## An attempt at solving the Phoenix Application kata with the public cloud. 
+---
 
 This repository contains the code of the Phoenix Application and the CloudFormation templates required to deploy it on Amazon Web Services. The deployment is managed by two AWS CloudFormation templates, one to create a CI/CD pipeline and another one to create the relevant resources for a high-available infrastructure. 
 
@@ -23,6 +24,7 @@ Here's a list of the AWS services that have been leveraged for this solution:
 - IAM
 - CloudWatch
 
+---
 
 ### Solution installation
 
@@ -38,6 +40,7 @@ These are the steps to launch the infrastructure:
 
 5. Open the link found under the Outputs tabs of the infrastructure stack to reach the endpoint of the running application. 
 
+---
 
 ### Known limitations
 
@@ -45,6 +48,7 @@ These are the steps to launch the infrastructure:
 
 - The solution uses more than one CloudFormation stack. When deleting them, it must be done in a specific order and some of the resources must be manually emptied (the S3 bucket and the ECR repository, as mentioned in the next section), otherwise the stack deletion will fail. 
 
+---
 
 ### Resource deletion
 
@@ -56,6 +60,7 @@ These are the steps to delete the infrastructure:
 
 3. Once the infrastructure stack is deleted successfully, proceed to delete the pipeline stack.
 
+---
 
 ### Requirements 
 
@@ -83,6 +88,7 @@ These are the steps to delete the infrastructure:
 
     This has not been implemented, at least not with the number of incoming requests as requested. The infrastructure CloudFormation template uses Application AutoScaling to automatically scale the number of running tasks based on the CPU utilization in the cluster (implementation not finalized nor tested due to time constraints).
 
+---
 
 ### Potential improvements
 
