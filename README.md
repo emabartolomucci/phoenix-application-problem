@@ -52,15 +52,15 @@ These are the steps to launch the infrastructure:
 
 1. _Automate the creation of the infrastructure and the setup of the application._
 
-   This is done by leveraging CloudFormation as an IaC service. 
+    This is done by leveraging CloudFormation as an IaC service. 
 
 2. _Recover from crashes. Implement a method autorestart the service on crash_
 
-   The application will always have the requested number of running tasks thanks to the ECS service. If one of more tasks are killed, new ones are launched to reach the number set by the _DesiredCount_ property.
+    The application will always have the requested number of running tasks thanks to the ECS service. If one of more tasks are killed, new ones are launched to reach the number set by the _DesiredCount_ property.
 
 3. _Backup the logs and database with rotation of 7 days_
 
-   Logs from the Fargate containers and DocumentDB database are automatically exported to CloudWatch. 
+    Logs from the Fargate containers and DocumentDB database are automatically exported to CloudWatch. 
 
 4. _Notify any CPU peak_
 
