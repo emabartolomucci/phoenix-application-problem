@@ -1,0 +1,305 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: >-
+  The CloudFormation template that creates a Fargate cluster, IAM resources, a
+  DocumentDB cluster, and all relevant resources.
+
+Parameters:
+  StagePrefix:
+    Type: String
+    Default: dev
+  MongoDBMasterUsername:
+    Type: String
+    Default: documentdb
+  MongoDBMasterPassword:
+    Type: String
+    Default: documentdb
+    NoEcho: true
+  MongoDBPort:
+    Type: String
+    Default: 27017
+  ContainerPort:
+    Type: Number
+    Default: 8080
+  DockerImageURI:
+    Type: String
+  MinRunningTasks:
+    Type: Number
+    Default: 2
+  MaxRunningTasks:
+    Type: Number
+    Default: 4
+  AutoScalingTargetValue:
+    Type: Number
+    Default: 50
+
+Resources:
+
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: 172.10.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+  
+  SubnetA:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      CidrBlock: 172.10.1.0/24
+      VpcId: !Ref VPC
+      AvailabilityZone: !Sub '${AWS::Region}a'
+  
+  SubnetB:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      CidrBlock: 172.10.2.0/24
+      VpcId: !Ref VPC
+      AvailabilityZone: !Sub '${AWS::Region}b'
+  
+  PublicRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+  
+  PublicRoute:
+    Type: 'AWS::EC2::Route'
+    DependsOn: VPCInternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  
+  SubnetAPublicRouteAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref SubnetA
+  
+  SubnetBPublicRouteAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref SubnetB
+  
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+  
+  VPCInternetGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+  
+  DocumentDBCluster:
+    Type: 'AWS::DocDB::DBCluster'
+    Properties:
+      BackupRetentionPeriod: 7
+      EnableCloudwatchLogsExports:
+        - audit
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      DBClusterIdentifier: !Sub '${StagePrefix}-${AWS::AccountId}-mongodb-cluster'
+      MasterUsername: !Ref MongoDBMasterUsername
+      MasterUserPassword: !Ref MongoDBMasterPassword
+      Port: !Ref MongoDBPort
+      VpcSecurityGroupIds:
+        - !Ref DBSecurityGroup
+  
+  DocumentDBInstance:
+    Type: 'AWS::DocDB::DBInstance'
+    Properties:
+      AvailabilityZone: !Sub '${AWS::Region}a'
+      DBClusterIdentifier: !Ref DocumentDBCluster
+      DBInstanceClass: db.t3.medium
+      DBInstanceIdentifier: !Sub '${StagePrefix}-${AWS::AccountId}-mongodb-instance'
+  
+  DBSubnetGroup:
+    Type: 'AWS::DocDB::DBSubnetGroup'
+    Properties:
+      DBSubnetGroupDescription: Subnets for the Document DB instances.
+      SubnetIds:
+        - !Ref SubnetA
+        - !Ref SubnetB
+  
+  DBSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: !Sub '${StagePrefix}-${AWS::AccountId}-mongodb-security-group'
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref MongoDBPort
+          ToPort: !Ref MongoDBPort
+          SourceSecurityGroupId: !Ref ContainerSecurityGroup
+  
+  Cluster:
+    Type: 'AWS::ECS::Cluster'
+    Properties:
+      ClusterName: !Sub '${StagePrefix}-${AWS::AccountId}-ecs-cluster'
+  
+  ECSService:
+    Type: 'AWS::ECS::Service'
+    DependsOn:
+      - LoadBalancerListener
+      - DocumentDBInstance
+    Properties:
+      Cluster: !Ref Cluster
+      TaskDefinition: !Ref TaskDefinition
+      DesiredCount: 4
+      HealthCheckGracePeriodSeconds: 120
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsVpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets:
+            - !Ref SubnetA
+            - !Ref SubnetB
+          SecurityGroups:
+            - !Ref ContainerSecurityGroup
+      LoadBalancers:
+        - TargetGroupArn: !Ref TargetGroup
+          ContainerName: !Sub '${StagePrefix}-${AWS::AccountId}-ecs-container'
+          ContainerPort: !Ref ContainerPort
+  
+  ECSExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub '${StagePrefix}-${AWS::AccountId}-ecs-executionrole'
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
+  
+  TaskDefinition:
+    Type: 'AWS::ECS::TaskDefinition'
+    Properties:
+      Cpu: '512'
+      Memory: '1024'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      TaskRoleArn: !Ref ECSExecutionRole
+      ExecutionRoleArn: !GetAtt 
+        - ECSExecutionRole
+        - Arn
+      ContainerDefinitions:
+        - Name: !Sub '${StagePrefix}-${AWS::AccountId}-ecs-container'
+          Image: !Ref DockerImageURI
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref CloudWatchLogsGroup
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: ecs
+          PortMappings:
+            - ContainerPort: !Ref ContainerPort
+              HostPort: !Ref ContainerPort
+          Environment:
+            - Name: PORT
+              Value: !Ref ContainerPort
+            - Name: DB_CONNECTION_STRING
+              Value: !Sub >-
+                mongodb://${MongoDBMasterUsername}:${MongoDBMasterPassword}@${DocumentDBCluster.Endpoint}:${MongoDBPort}/?ssl=true&ssl_ca_certs=rds-combined-ca-bundle.pem&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false
+  
+  CloudWatchLogsGroup:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName: !Sub '/ecs/${StagePrefix}-${AWS::AccountId}-logs'
+      RetentionInDays: 7
+  
+  LoadBalancerSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: !Sub '${StagePrefix}-${AWS::AccountId}-alb-security-group'
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref ContainerPort
+          ToPort: !Ref ContainerPort
+          CidrIp: 0.0.0.0/0
+  
+  ContainerSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: !Sub '${StagePrefix}-${AWS::AccountId}-container-security-group'
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref ContainerPort
+          ToPort: !Ref ContainerPort
+          SourceSecurityGroupId: !Ref LoadBalancerSecurityGroup
+  
+  LoadBalancer:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      IpAddressType: ipv4
+      Name: !Sub '${StagePrefix}-${AWS::AccountId}-alb'
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref LoadBalancerSecurityGroup
+      Subnets:
+        - !Ref SubnetA
+        - !Ref SubnetB
+      Type: application
+  
+  LoadBalancerListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref TargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: !Ref ContainerPort
+      Protocol: HTTP
+  
+  TargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      Port: !Ref ContainerPort
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VPC
+
+  AutoScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MinCapacity: !Ref MinRunningTasks
+      MaxCapacity: !Ref MaxRunningTasks
+      ResourceId: !Sub 'service/${Cluster}/${ECSService.Name}'
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+      RoleARN: !GetAtt AutoScalingRole.Arn
+
+  AutoScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub ${ECSService}-autoscalingpolicy
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref AutoScalingTarget
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        ScaleInCooldown: 10
+        ScaleOutCooldown: 10
+        TargetValue: !Ref AutoScalingTargetValue
+
+  AutoScalingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${StagePrefix}-${AWS::AccountId}-autoscaling-role'
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceAutoscaleRole'
+
+Outputs:
+  ApplicationEndpoint:
+    Description: The DNS name and port of the cluster's load balancer.
+    Value: !Sub '${LoadBalancer.DNSName}:${ContainerPort}'
